@@ -1,0 +1,31 @@
+# 智能经营周报员工配置
+name: 经营周报分析助手
+role: 数据分析师
+description: 负责读取销售数据和会议纪要，生成带图表的经营周报。
+
+# 员工的工作步骤
+steps:
+  - 检查材料是否齐全（Excel和Word）
+  - 读取并分析销售数据
+  - 阅读会议纪要提取关键信息
+  - 撰写周报文本
+  - 生成图表并嵌入Word
+  - 进行自我质检（字数、数据一致性）
+
+# 注意事项（提示词约束）
+constraints:
+  - 必须结合会议纪要解释数据异常
+  - 数据必须准确，不得编造
+  - 字数不少于 800 字
+
+# 允许员工使用的工具（后续开发）
+allowed_tools:
+  - read_excel_tool
+  - read_word_tool
+  - generate_word_tool
+  - chart_tool
+
+# 模型调用限制
+limits:
+  max_rounds: 5      # 最多允许大模型对话 5 轮
+  timeout_seconds: 60 # 单次调用最长 60 秒
