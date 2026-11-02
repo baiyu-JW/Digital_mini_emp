@@ -35,8 +35,13 @@ def check_form(form_data):
             continue
         # 文件类型校验（界面已限制 type，此处再兜底，防止其他入口绕过）
         if rules["type"] == "file" and rules.get("accept"):
-            ext = str(val).rsplit("。", 1)[-1].lower() if "." in str(val) else ""
+            ext = str(val).rsplit(".", 1)[-1].lower() if "." in str(val) else ""
             if ext not in rules["accept"]:
+                # 加这一行来破案
+                print(f"======== 调试：字段 {name} 收到了值 '{val}'，切出来的后缀是 '{ext}' ========")
+
+                if ext not in rules["accept"]:
+                    missing.append(f"{rules['description']}（格式应为 {rules['accept']}）")
                 missing.append(f"{rules['description']}(格式应为{rules['accept']})")
     if missing:
         return False, missing

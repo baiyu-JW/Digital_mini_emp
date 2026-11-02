@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 from tools.generate_word import generate_word
-
+from tools.read_excel import read_sales_data
 from state_machine import (
     STATUS_PENDING, STATUS_CHECKING, STATUS_WAITING, STATUS_EXECUTING,
     E_SUBMIT, E_MATERIAL_OK, E_MATERIAL_MISSING, E_RESUPPLY,
@@ -70,12 +70,15 @@ elif task["status"] == STATUS_WAITING:
         resubmitted = st.form_submit_button("补充并提交")
 
     if resubmitted:
-        form_data = {
-            "period": task.get("form", {}).get("period"),
-            "sales_file": sales_file.name if sales_file else None,
-            "meeting_file": meeting_file.name if meeting_file else None,
-        }
-        is_valid, missing = check_form(form_data)
+        # 【修复】不要重新打包整个表单了，直接把新文件存进记忆库
+        if sales_file:
+            task["form"]["sales_file"] = sales_file.name
+        if meeting_file:
+            task["form"]["meeting_file"] = meeting_file.name
+
+        # 重新检查记忆库里的表单是否齐全
+        is_valid, missing = check_form(task["form"])
+
         if is_valid:
             task["status"] = next_status(STATUS_WAITING, E_RESUPPLY)
             task["status"] = next_status(STATUS_CHECKING, E_MATERIAL_OK)
@@ -92,20 +95,30 @@ else:
         st.success("✅ 当前状态：【执行中】")
         st.info("正在调用大模型生成经营周报，请稍候...")
 
-        # 模拟的周报内容（注意文字不能缩进！）
-        mock_text = f"""# 一、本周总体情况
-这是 {task['form']['period']} 的经营数据汇总。
-本周总销售额为 120 万元，环比上升 12%。
-# 二、异常分析
-华东区受台风天气影响，门店客流减少，导致销售下滑。
-建议下周开展线上促销活动以弥补损失。"""
+        excel_path = task["form"]["sales_file"]
+        result = read_sales_data(excel_path)
+
+        if result["success"]:
+            real_text = f"""# 一，本周经营情况
+            统计周期：{task['form']['period']}
+            本周系统统共分析了{result['store_count']}家门店的数据。
+            #二，数据总结
+            本周总销售额为{result['total_sales']}元。
+            #三,下一步计划
+            数据已读取完毕，后续将接入大模型生成详细业务建议。"""
+            st.info(result["message"])
+        else:
+            real_text = f"#读取失败\n{result['message']}"
+            st.error(result["message"])
+
+
 
         out_file = "本周经营周报.docx"
 
         # 调用 Word 工具
         try:
             generate_word(
-                report_text=mock_text,
+                report_text=real_text,
                 out_path=out_file,
                 title="智能经营周报",
                 meta={"统计周期": task['form']['period']}
