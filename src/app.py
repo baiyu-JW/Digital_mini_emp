@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+import os
 from tools.generate_word import generate_word
 from tools.read_excel import read_sales_data
 from state_machine import (
@@ -99,29 +100,35 @@ else:
         result = read_sales_data(excel_path)
 
         if result["success"]:
-            real_text = f"""# 一，本周经营情况
+            real_text = f"""# 一、本周经营情况
             统计周期：{task['form']['period']}
-            本周系统统共分析了{result['store_count']}家门店的数据。
-            #二，数据总结
-            本周总销售额为{result['total_sales']}元。
-            #三,下一步计划
+            本周系统统共分析了 {result['store_count']} 家门店的数据。
+
+            # 二、数据总结
+            本周总销售额为 {result['total_sales']} 元。
+
+            # 三、下一步计划
             数据已读取完毕，后续将接入大模型生成详细业务建议。"""
+
             st.info(result["message"])
+
+            # 网页展示图表
+            if result.get("chart_path") and os.path.exists(result["chart_path"]):
+                st.image(result["chart_path"], caption="各门店销售数据", use_container_width=True)
         else:
             real_text = f"#读取失败\n{result['message']}"
             st.error(result["message"])
-
-
-
+        # 生成 Word
         out_file = "本周经营周报.docx"
-
+        chart_list = [result["chart_path"]] if result.get("chart_path") else None
         # 调用 Word 工具
         try:
             generate_word(
                 report_text=real_text,
                 out_path=out_file,
                 title="智能经营周报",
-                meta={"统计周期": task['form']['period']}
+                meta={"统计周期": task['form']['period']},
+                charts = chart_list
             )
 
             # 生成下载按钮
