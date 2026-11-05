@@ -5,6 +5,9 @@ import pandas as pd
 import os
 from tools.generate_word import generate_word
 from tools.read_excel import read_sales_data
+from tools.call_llm import call_deepseek  # 修复了这里的拼写错误
+from tools.read_text import read_meeting_minutes
+from tools.config_loader import load_employee_config
 from state_machine import (
     STATUS_PENDING, STATUS_CHECKING, STATUS_WAITING, STATUS_EXECUTING,
     E_SUBMIT, E_MATERIAL_OK, E_MATERIAL_MISSING, E_RESUPPLY,
@@ -47,6 +50,14 @@ if task["status"] == STATUS_PENDING:
             "sales_file": sales_file.name if sales_file else None,
             "meeting_file": meeting_file.name if meeting_file else None,
         }
+
+        if sales_file:
+            with open(sales_file.name, "wb") as f:
+                f.write(sales_file.getbuffer())
+        if meeting_file:
+            with open(meeting_file.name, "wb") as f:
+                f.write(meeting_file.getbuffer())
+
         task["form"] = form_data
 
         # 2) 准入校验 -> 产生事件
@@ -71,10 +82,14 @@ elif task["status"] == STATUS_WAITING:
         resubmitted = st.form_submit_button("补充并提交")
 
     if resubmitted:
-        # 【修复】不要重新打包整个表单了，直接把新文件存进记忆库
+        # 不要重新打包整个表单了，直接把新文件存进记忆库
         if sales_file:
+            with open(sales_file.name,"wb") as f:
+                f.write(sales_file.getbuffer())
             task["form"]["sales_file"] = sales_file.name
         if meeting_file:
+            with open(meeting_file.name,"wb") as f:
+                f.write(meeting_file.getbuffer())
             task["form"]["meeting_file"] = meeting_file.name
 
         # 重新检查记忆库里的表单是否齐全
@@ -94,41 +109,77 @@ else:
     # ========= 处理“执行中”的状态 =========
     if task["status"] == STATUS_EXECUTING:
         st.success("✅ 当前状态：【执行中】")
-        st.info("正在调用大模型生成经营周报，请稍候...")
+        st.info("正在读取数据并呼叫 DeepSeek 生成经营周报，请稍候...")
 
         excel_path = task["form"]["sales_file"]
         result = read_sales_data(excel_path)
 
         if result["success"]:
-            real_text = f"""# 一、本周经营情况
-            统计周期：{task['form']['period']}
-            本周系统统共分析了 {result['store_count']} 家门店的数据。
-
-            # 二、数据总结
-            本周总销售额为 {result['total_sales']} 元。
-
-            # 三、下一步计划
-            数据已读取完毕，后续将接入大模型生成详细业务建议。"""
-
             st.info(result["message"])
 
             # 网页展示图表
             if result.get("chart_path") and os.path.exists(result["chart_path"]):
                 st.image(result["chart_path"], caption="各门店销售数据", use_container_width=True)
+
+            meeting_path = task["form"]["meeting_file"]
+            meeting_text = read_meeting_minutes(meeting_path)
+            st.write(f"📄 已读取会议纪要：{meeting_text[:20]}...")
+
+            emp_config = load_employee_config()
+            if emp_config:
+                rules_text = "\n".join([f"-{rule}" for rule in emp_config.get("constraints",[])])
+            else:
+                rules_text = "无特殊要求"
+
+            # ================= 接入大模型的核心代码 =================
+            st.write("⏳ 正在呼叫大模型生成专业报告...")
+
+            # 组装提示词（把真实数据喂给它）
+            prompt = f"""
+            你现在的岗位是：{emp_config.get('role', '数据分析师')}
+            
+            请你绝对遵守以下注意事项：
+            {rules_text}
+            
+            请帮我写一份经营周报。
+            统计周期：{task['form']['period']}
+            门店数量：{result['store_count']} 家
+            总销售额：{result['total_sales']} 元。
+            【本阶段开会纪要如下】：
+            {meeting_text}
+            
+            请结合以上所有数据和会议纪要，严格按照以下格式撰写一份周报：
+            # 一、本周数据概况
+            # 二、业务分析洞察
+            # 三、下一步行动建议
+            要求语言专业，字数满足配置要求。
+            """
+
+            # 调用大模型，把返回的文字存进 real_text
+            real_text = call_deepseek(prompt)
+
+            # 如果大模型报错了，给它一点兜底
+            if real_text.startswith("❌"):
+                st.error(real_text)
+            else:
+                st.success("✅ 大模型生成完毕！")
+            # =======================================================
+
         else:
-            real_text = f"#读取失败\n{result['message']}"
+            real_text = f"# 读取失败\n{result['message']}"
             st.error(result["message"])
+
         # 生成 Word
         out_file = "本周经营周报.docx"
         chart_list = [result["chart_path"]] if result.get("chart_path") else None
-        # 调用 Word 工具
+
         try:
             generate_word(
                 report_text=real_text,
                 out_path=out_file,
                 title="智能经营周报",
                 meta={"统计周期": task['form']['period']},
-                charts = chart_list
+                charts=chart_list
             )
 
             # 生成下载按钮
@@ -152,7 +203,7 @@ else:
     else:
         st.info(f"当前状态：【{task['status']}】。")
 
-    # 底部重置按钮（注意缩进，和 if 平级）
+    # 底部重置按钮
     st.divider()
     if st.button("↺ 重置任务（演示用）"):
         for k in list(st.session_state.keys()):
