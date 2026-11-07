@@ -1,11 +1,19 @@
 # 运行依赖（赛题要求：一键运行说明 + 依赖清单）
+
+# --- 核心框架 ---
 streamlit>=1.30
-pyyaml>=6.0
-python-docx>=1.1          # Day 4 文档生成
-openpyxl>=3.1             # Day 5 读取 xlsx
-pandas>=2.0               # Day 5 数据聚合
-matplotlib>=3.7           # Day 6 图表
-langgraph>=0.2            # Day 8-12 流程编排（可选，纯 Python 亦可）
-# 大模型 SDK 按你选用的模型安装，例如：
-# openai>=1.0            # DeepSeek / 通义千问兼容 OpenAI 接口
-# zhipuai>=2.0           # GLM
+
+# --- 数据与文档处理 ---
+pandas>=2.0               # 数据聚合、清洗
+openpyxl>=3.1             # 读取 xlsx 文件必需
+python-docx>=1.1          # 生成 Word 报告
+pyyaml>=6.0               # 读取 employee.yaml 员工配置
+
+# --- 图表与网络 ---
+matplotlib>=3.7           # 绘制柱状图并嵌入 Word
+pyparsing                 # matplotlib 必装依赖（防机房缺包）
+requests                  # 调用 DeepSeek 大模型 API
+python-dotenv             # 加载 .env 环境变量
+
+# --- 可选：若未来升级为图编排框架 ---
+# langgraph>=0.2
