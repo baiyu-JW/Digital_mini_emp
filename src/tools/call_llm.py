@@ -6,15 +6,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def call_deepseek(prompt):
+def call_deepseek(prompt, config=None):
     """
-    工具：调用Deepseek大模型
-    入参：prompt(给大模型的提示词)
-    出参:大模型生成的文本
+    工具：调用 DeepSeek 大模型（兼容 OpenAI 接口；如需切换 GLM 仅改下方 model/url）。
+    入参：prompt(给大模型的提示词)，config(员工配置，读取 limits.timeout_seconds)
+    出参: 大模型生成的文本；失败返回以 ❌ 开头的错误串（调用方据此转人工）
     """
+    config = config or {}
+    timeout = int((config.get("limits") or {}).get("timeout_seconds", 60))
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
-        return"❌ 错误：未在 .env 文件中找到 DEEPSEEK_API_KEY"
+        return "❌ 错误：未在 .env 文件中找到 DEEPSEEK_API_KEY"
     url = "https://api.deepseek.com/chat/completions"
     hd = {
         "Content-Type": "application/json",
@@ -30,7 +32,7 @@ def call_deepseek(prompt):
         "temperature":0.5
     }
     try:
-        res = requests.post(url,headers=hd,json=data,timeout=60)
+        res = requests.post(url,headers=hd,json=data,timeout=timeout)
         res.raise_for_status()
 
         result_json = res.json()
